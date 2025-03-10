@@ -1,5 +1,5 @@
 # Rex - AI Assistant  
-
+### (IN PROGRESS)
 ## Overview  
 Rex is an intelligent AI assistant designed to work seamlessly both online and offline. It can automate tasks, interact with applications, execute commands, and learn from user interactions to improve over time.  
 
