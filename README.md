@@ -68,7 +68,7 @@ Rex/
 
 3. Run the AI assistant:
    ```bash
-   python backend/agent.py
+   wokring on it....
    
 ### Future Enhancements
 
