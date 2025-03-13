@@ -4,15 +4,12 @@ from rapidfuzz import process
 
 MODULES = {}  # Stores module names and their available commands
 
-
 def load_modules():
-    """
-    Dynamically loads all modules from the 'modules' package and retrieves their available commands.
-    """
+    """Dynamically loads all modules from the 'modules' package and retrieves their available commands."""
     global MODULES
-    MODULES.clear()  # Reset before loading
+    MODULES.clear()
 
-    package_name = "modules"  # Directory containing all module scripts
+    package_name = "modules"
     package = importlib.import_module(package_name)
 
     print("[DEBUG] Loading modules...")
@@ -28,7 +25,6 @@ def load_modules():
         except ImportError as e:
             print(f"[ERROR] Error loading module '{module_name}': {e}")
 
-
 def get_best_match(word, choices, threshold=70):
     """Find the closest match using fuzzy search."""
     print(f"[DEBUG] Searching best match for '{word}' in {choices}")
@@ -36,15 +32,14 @@ def get_best_match(word, choices, threshold=70):
     print(f"[DEBUG] Found match: '{match}' with score: {score}")
     return match if score >= threshold else None
 
-
 def parse_command(user_input):
     """
-    Extracts the module and action from user input efficiently.
+    Extracts the module, action, and parameters from user input efficiently.
     """
     words = user_input.lower().split()
     if not words:
         print("[DEBUG] No input provided.")
-        return None, None
+        return None, None, None
 
     print(f"[DEBUG] Parsing command: '{user_input}'")
 
@@ -54,18 +49,29 @@ def parse_command(user_input):
     if matched_module:
         print(f"[DEBUG] Matched module: {matched_module}")
 
-        # Extract possible action from user input (excluding module name)
-        remaining_words = " ".join([word for word in words if word not in matched_module.split()])
-        print(f"[DEBUG] Remaining words after removing module: '{remaining_words}'")
+        # Remove module name from words
+        remaining_words = [word for word in words if word not in matched_module.split()]
+        remaining_text = " ".join(remaining_words)
+        print(f"[DEBUG] Remaining words after removing module: '{remaining_text}'")
 
-        # Match action only once
-        matched_action = get_best_match(remaining_words, MODULES[matched_module]) if remaining_words else None
+        # Match action from remaining words
+        matched_action = get_best_match(remaining_text, MODULES[matched_module]) if remaining_words else None
+
+        # Extract parameters (words after action)
+        if matched_action:
+            action_words = matched_action.split()
+            remaining_words = [word for word in remaining_words if word not in action_words]
+            parameters = " ".join(remaining_words) if remaining_words else None
+        else:
+            parameters = remaining_text if remaining_text else None
 
         print(f"[DEBUG] Matched action: {matched_action if matched_action else 'None'}")
-        return matched_module, matched_action or remaining_words
+        print(f"[DEBUG] Extracted parameters: {parameters if parameters else 'None'}")
+
+        return matched_module, matched_action, parameters
 
     print("[WARNING] No matching module found.")
-    return None, user_input
+    return None, None, user_input
 
 
 if __name__ == "__main__":
@@ -73,8 +79,10 @@ if __name__ == "__main__":
 
     while True:
         user_input = input("\nEnter a command: ")
-        module, action = parse_command(user_input)
+        module, action, parameters = parse_command(user_input)
         if module and action:
-            print(f"[RESULT] Matched module: {module}, Action: {action}")
+            print(f"[RESULT] Matched module: {module}, Action: {action}, Parameters: {parameters if parameters else 'None'}")
+        elif module:
+            print(f"[RESULT] Module detected: {module}, but no valid action found.")
         else:
             print("[RESULT] Command not recognized.")

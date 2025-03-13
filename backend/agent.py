@@ -1,6 +1,7 @@
 import sys
 import importlib
 from nlp.command_parser import parse_command, get_best_match, load_modules
+from setuptools.package_index import user_agent
 
 # Load available modules dynamically
 load_modules()
@@ -16,11 +17,9 @@ AVAILABLE_MODULES = {
     "akinator": "modules.akinator"
 }
 
-
 def execute_command(user_input):
     """Processes user input and executes the corresponding module action."""
-    command, details = parse_command(user_input)
-
+    command, action, details = parse_command(user_input)
     if not command:
         print("[ERROR] Command not recognized.")
         return
@@ -37,16 +36,16 @@ def execute_command(user_input):
     try:
         module = importlib.import_module(module_path)
         if hasattr(module, "handle_command"):
-            module.handle_command(details)
+            module.handle_command(action,details)
         else:
             print(f"[ERROR] Module '{module_name}' does not have a handle_command function.")
     except ImportError as e:
         print(f"[ERROR] Failed to import module {module_name}: {e}")
 
-
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        user_input = " ".join(sys.argv[1:])
-        execute_command(user_input)
-    else:
-        print("Usage: python backend/agent.py 'your command here'")
+    user_input="spotify set_volume to 10"
+    # if len(sys.argv) > 1:
+    #     user_input = " ".join(sys.argv[1:])
+    execute_command(user_input)
+    # else:
+    #     print("Usage: python backend/agent.py 'your command here'")

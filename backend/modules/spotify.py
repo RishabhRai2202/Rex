@@ -1,10 +1,20 @@
 import os
+import subprocess
+from sys import stdout
+import re
 
 
 def run_osascript(script):
-    """Executes an AppleScript command and returns the output."""
-    return os.popen(f"osascript -e '{script}'").read().strip()
-
+    try:
+        result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+        print(result.stdout.strip())
+        if result.returncode == 0:
+            return result.stdout.strip()  # Removes any extra newlines
+        else:
+            return None  # Handle failures gracefully
+    except Exception as e:
+        print(f"Error running AppleScript: {e}")
+        return None
 
 # ========================
 # Spotify Playback Controls
@@ -48,6 +58,7 @@ def quit_spotify():
 # ========================
 
 def get_player_state():
+    print("GETTING PLAYER STATE: ")
     return run_osascript('tell application "Spotify" to player state')  # stopped, playing, paused
 
 
@@ -127,12 +138,21 @@ def get_volume():
     return run_osascript('tell application "Spotify" to sound volume')
 
 
-def set_volume(level):
-    """Sets the volume between 0 and 100."""
-    if level.isdigit() and 0 <= int(level) <= 100:
-        run_osascript(f'tell application "Spotify" to set sound volume to {level}')
+def set_volume(command):
+    """
+    Sets the Spotify volume. Extracts volume from the command if needed.
+    """
+    match = re.search(r'(\d+)', command)  # Extracts first number found
+    if match:
+        volume = int(match.group(1))
+        if 0 <= volume <= 100:
+            run_osascript(f'tell application "Spotify" to set sound volume to {volume}')
+            print(f"✅ Volume set to {volume}.")
+        else:
+            print("[ERROR] Invalid volume level. Please provide a number between 0 and 100.")
     else:
-        print("Invalid volume level. Please provide a number between 0 and 100.")
+        print("[ERROR] No volume level found. Please provide a valid number.")
+
 
 
 # ========================
@@ -206,7 +226,7 @@ COMMANDS = {
     "album_artwork": get_album_artwork,
     "player_position": get_player_position,
     "set_player_position": set_player_position,
-    "volume": get_volume,
+    # "volume": get_volume,
     "set_volume": set_volume,
     "shuffling": is_shuffling,
     "set_shuffle": set_shuffle,
@@ -221,11 +241,14 @@ COMMANDS = {
 
 def handle_command(action, details=None):
     """Executes the given Spotify command dynamically."""
+    print("ACTION IN HANDLE COMMAND",action)
     if action in COMMANDS:
         if details:
             COMMANDS[action](details)  # Call with parameter if needed
         else:
-            return COMMANDS[action]()  # Call function without parameters
+            result = COMMANDS[action]()  # Call function without parameters
+            if result:
+                print(result) # Call function without parameters
     else:
         print(f"Unsupported action '{action}' for Spotify.")
 
