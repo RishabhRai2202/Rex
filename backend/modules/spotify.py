@@ -7,7 +7,6 @@ import re
 def run_osascript(script):
     try:
         result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
-        print(result.stdout.strip())
         if result.returncode == 0:
             return result.stdout.strip()  # Removes any extra newlines
         else:
@@ -135,24 +134,52 @@ def set_player_position(seconds):
 
 
 def get_volume():
-    return run_osascript('tell application "Spotify" to sound volume')
+    """
+    Gets the current volume of Spotify.
+    """
+    current_volume = run_osascript('tell application "Spotify" to sound volume')
+    try:
+        return int(current_volume) if current_volume.isdigit() else 50  # Default to 50 if not detected
+    except ValueError:
+        return 50  # Default safe value
 
 
 def set_volume(command):
     """
-    Sets the Spotify volume. Extracts volume from the command if needed.
-    """
-    match = re.search(r'(\d+)', command)  # Extracts first number found
-    if match:
-        volume = int(match.group(1))
-        if 0 <= volume <= 100:
-            run_osascript(f'tell application "Spotify" to set sound volume to {volume}')
-            print(f"✅ Volume set to {volume}.")
-        else:
-            print("[ERROR] Invalid volume level. Please provide a number between 0 and 100.")
-    else:
-        print("[ERROR] No volume level found. Please provide a valid number.")
+    Sets the Spotify volume based on the given command.
 
+    - "max" → 100
+    - "min" → 10
+    - "increase" → +10 from current volume
+    - "decrease" → -10 from current volume (no negative values)
+    - Direct numeric values are applied
+    """
+    command = command.lower().strip()
+
+    if "max" in command:
+        volume = 100
+    elif "min" in command:
+        volume = 10
+    elif "increase" in command:
+        current_volume = get_volume()
+        volume = min(current_volume + 10, 100)  # Increase but cap at 100
+    elif "decrease" in command:
+        current_volume = get_volume()
+        volume = max(current_volume - 10, 0)  # Decrease but ensure 0 is minimum
+    else:
+        match = re.search(r'(\d+)', command)  # Extract first number
+        if match:
+            volume = int(match.group(1))
+        else:
+            print("[ERROR] No valid volume level found.")
+            return
+
+    # Apply volume change
+    if 0 <= volume <= 100:
+        run_osascript(f'tell application "Spotify" to set sound volume to {volume}')
+        print(f"✅ Volume set to {volume}.")
+    else:
+        print("[ERROR] Invalid volume level. Must be between 0 and 100.")
 
 
 # ========================

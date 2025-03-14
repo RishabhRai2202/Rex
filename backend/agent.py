@@ -1,7 +1,6 @@
 import sys
 import importlib
 from nlp.command_parser import parse_command, get_best_match, load_modules
-from setuptools.package_index import user_agent
 
 # Load available modules dynamically
 load_modules()
@@ -43,9 +42,8 @@ def execute_command(user_input):
         print(f"[ERROR] Failed to import module {module_name}: {e}")
 
 if __name__ == "__main__":
-    user_input="spotify set_volume to 10"
-    # if len(sys.argv) > 1:
-    #     user_input = " ".join(sys.argv[1:])
+    if len(sys.argv) > 1:
+        user_input = " ".join(sys.argv[1:])
     execute_command(user_input)
-    # else:
-    #     print("Usage: python backend/agent.py 'your command here'")
+else:
+        print("Usage: python backend/agent.py 'your command here'")
