@@ -236,7 +236,7 @@ COMMANDS = {
     "play_track": play_track,
     "quit": quit_spotify,
     "player_state": get_player_state,
-    "track_info": get_current_track,
+    # "track_info": get_current_track,
     "track_name": get_track_name,
     "track_artist": get_track_artist,
     "track_album": get_track_album,
