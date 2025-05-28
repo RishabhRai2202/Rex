@@ -2,6 +2,21 @@ import os
 import subprocess
 from sys import stdout
 import re
+import time
+import spotipy
+from spotipy.oauth2 import SpotifyClientCredentials
+from thefuzz import process
+
+
+with open('/Users/rishabh/Downloads/secretRex.txt', 'r') as file:
+    content = file.read().strip()
+
+    # Use exec() with a local namespace
+    locals_dict = {}
+    exec(content, {}, locals_dict)
+    client_id = locals_dict.get('spotify_client_id')
+    client_secret = locals_dict.get('spotify_client_secret')
+
 
 
 def run_osascript(script):
@@ -43,10 +58,81 @@ def previous_track():
     run_osascript('tell application "Spotify" to previous track')
 
 
-def play_track(track_uri):
-    """Plays a specific track or playlist given its Spotify URI."""
-    run_osascript(f'tell application "Spotify" to play track "{track_uri}"')
+def play_track(song_query):
+    """
+    Plays a specific track that matches the query.
+    Automatically selects the first result if match score > 70%.
+    Otherwise asks for user confirmation.
+    """
+    try:
+        auth_manager = SpotifyClientCredentials(client_id=client_id, client_secret=client_secret)
+        sp = spotipy.Spotify(auth_manager=auth_manager)
+    except Exception as e:
+        print(f"Error initializing Spotify client: {e}")
+        return None
 
+    # Search for songs
+    print(f"Searching for: '{song_query}'...")
+    try:
+        results = sp.search(q=song_query, type='track', limit=10)
+        tracks = results['tracks']['items']
+
+        if not tracks:
+            print("No songs found matching your query.")
+            return None
+
+        # Create a list of song names with artists for display
+        song_options = []
+        song_uris = {}
+
+        for track in tracks:
+            artists = ", ".join([artist['name'] for artist in track['artists']])
+            display_name = f"{track['name']} by {artists}"
+            song_options.append(display_name)
+            song_uris[display_name] = track['uri']
+
+        # Use fuzzy matching to find the best matches
+        matches = process.extract(song_query, song_options, limit=5)
+
+        # Check if the top match has a score > 70%
+        top_match, top_score = matches[0]
+
+        if top_score > 70:
+            # Automatically select the first match
+            uri = song_uris[top_match]
+            print(f"Auto-selected (Match: {top_score}%): {top_match}")
+            print(f"URI: {uri}")
+            run_osascript(f'tell application "Spotify" to play track "{uri}"')
+            return uri
+        else:
+            # If no high confidence match, display options and ask user
+            print("\nNo strong matches found. Please select from options:")
+            for i, (match, score) in enumerate(matches):
+                print(f"{i + 1}. {match} (Match: {score}%)")
+
+            # Get user selection
+            while True:
+                try:
+                    selection = input("\nEnter number to select (or 'q' to quit): ")
+                    if selection.lower() == 'q':
+                        return None
+
+                    index = int(selection) - 1
+                    if 0 <= index < len(matches):
+                        selected_song = matches[index][0]
+                        uri = song_uris[selected_song]
+                        print(f"Selected: {selected_song}")
+                        print(f"URI: {uri}")
+                        run_osascript(f'tell application "Spotify" to play track "{uri}"')
+                        return uri
+                    else:
+                        print("Invalid selection. Please try again.")
+                except ValueError:
+                    print("Please enter a valid number.")
+
+    except Exception as e:
+        print(f"Error searching Spotify: {e}")
+        return None
 
 def quit_spotify():
     run_osascript('tell application "Spotify" to quit')
