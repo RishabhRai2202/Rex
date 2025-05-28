@@ -1,10 +1,34 @@
 import os
+import subprocess
+from sys import stdout
+import re
+import time
+import spotipy
+from spotipy.oauth2 import SpotifyClientCredentials
+from thefuzz import process
+
+
+with open('/Users/rishabh/Downloads/secretRex.txt', 'r') as file:
+    content = file.read().strip()
+
+    # Use exec() with a local namespace
+    locals_dict = {}
+    exec(content, {}, locals_dict)
+    client_id = locals_dict.get('spotify_client_id')
+    client_secret = locals_dict.get('spotify_client_secret')
+
 
 
 def run_osascript(script):
-    """Executes an AppleScript command and returns the output."""
-    return os.popen(f"osascript -e '{script}'").read().strip()
-
+    try:
+        result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+        if result.returncode == 0:
+            return result.stdout.strip()  # Removes any extra newlines
+        else:
+            return None  # Handle failures gracefully
+    except Exception as e:
+        print(f"Error running AppleScript: {e}")
+        return None
 
 # ========================
 # Spotify Playback Controls
@@ -34,10 +58,81 @@ def previous_track():
     run_osascript('tell application "Spotify" to previous track')
 
 
-def play_track(track_uri):
-    """Plays a specific track or playlist given its Spotify URI."""
-    run_osascript(f'tell application "Spotify" to play track "{track_uri}"')
+def play_track(song_query):
+    """
+    Plays a specific track that matches the query.
+    Automatically selects the first result if match score > 70%.
+    Otherwise asks for user confirmation.
+    """
+    try:
+        auth_manager = SpotifyClientCredentials(client_id=client_id, client_secret=client_secret)
+        sp = spotipy.Spotify(auth_manager=auth_manager)
+    except Exception as e:
+        print(f"Error initializing Spotify client: {e}")
+        return None
 
+    # Search for songs
+    print(f"Searching for: '{song_query}'...")
+    try:
+        results = sp.search(q=song_query, type='track', limit=10)
+        tracks = results['tracks']['items']
+
+        if not tracks:
+            print("No songs found matching your query.")
+            return None
+
+        # Create a list of song names with artists for display
+        song_options = []
+        song_uris = {}
+
+        for track in tracks:
+            artists = ", ".join([artist['name'] for artist in track['artists']])
+            display_name = f"{track['name']} by {artists}"
+            song_options.append(display_name)
+            song_uris[display_name] = track['uri']
+
+        # Use fuzzy matching to find the best matches
+        matches = process.extract(song_query, song_options, limit=5)
+
+        # Check if the top match has a score > 70%
+        top_match, top_score = matches[0]
+
+        if top_score > 70:
+            # Automatically select the first match
+            uri = song_uris[top_match]
+            print(f"Auto-selected (Match: {top_score}%): {top_match}")
+            print(f"URI: {uri}")
+            run_osascript(f'tell application "Spotify" to play track "{uri}"')
+            return uri
+        else:
+            # If no high confidence match, display options and ask user
+            print("\nNo strong matches found. Please select from options:")
+            for i, (match, score) in enumerate(matches):
+                print(f"{i + 1}. {match} (Match: {score}%)")
+
+            # Get user selection
+            while True:
+                try:
+                    selection = input("\nEnter number to select (or 'q' to quit): ")
+                    if selection.lower() == 'q':
+                        return None
+
+                    index = int(selection) - 1
+                    if 0 <= index < len(matches):
+                        selected_song = matches[index][0]
+                        uri = song_uris[selected_song]
+                        print(f"Selected: {selected_song}")
+                        print(f"URI: {uri}")
+                        run_osascript(f'tell application "Spotify" to play track "{uri}"')
+                        return uri
+                    else:
+                        print("Invalid selection. Please try again.")
+                except ValueError:
+                    print("Please enter a valid number.")
+
+    except Exception as e:
+        print(f"Error searching Spotify: {e}")
+        return None
 
 def quit_spotify():
     run_osascript('tell application "Spotify" to quit')
@@ -48,6 +143,7 @@ def quit_spotify():
 # ========================
 
 def get_player_state():
+    print("GETTING PLAYER STATE: ")
     return run_osascript('tell application "Spotify" to player state')  # stopped, playing, paused
 
 
@@ -124,15 +220,52 @@ def set_player_position(seconds):
 
 
 def get_volume():
-    return run_osascript('tell application "Spotify" to sound volume')
+    """
+    Gets the current volume of Spotify.
+    """
+    current_volume = run_osascript('tell application "Spotify" to sound volume')
+    try:
+        return int(current_volume) if current_volume.isdigit() else 50  # Default to 50 if not detected
+    except ValueError:
+        return 50  # Default safe value
 
 
-def set_volume(level):
-    """Sets the volume between 0 and 100."""
-    if level.isdigit() and 0 <= int(level) <= 100:
-        run_osascript(f'tell application "Spotify" to set sound volume to {level}')
+def set_volume(command):
+    """
+    Sets the Spotify volume based on the given command.
+
+    - "max" → 100
+    - "min" → 10
+    - "increase" → +10 from current volume
+    - "decrease" → -10 from current volume (no negative values)
+    - Direct numeric values are applied
+    """
+    command = command.lower().strip()
+
+    if "max" in command:
+        volume = 100
+    elif "min" in command:
+        volume = 10
+    elif "increase" in command:
+        current_volume = get_volume()
+        volume = min(current_volume + 10, 100)  # Increase but cap at 100
+    elif "decrease" in command:
+        current_volume = get_volume()
+        volume = max(current_volume - 10, 0)  # Decrease but ensure 0 is minimum
     else:
-        print("Invalid volume level. Please provide a number between 0 and 100.")
+        match = re.search(r'(\d+)', command)  # Extract first number
+        if match:
+            volume = int(match.group(1))
+        else:
+            print("[ERROR] No valid volume level found.")
+            return
+
+    # Apply volume change
+    if 0 <= volume <= 100:
+        run_osascript(f'tell application "Spotify" to set sound volume to {volume}')
+        print(f"✅ Volume set to {volume}.")
+    else:
+        print("[ERROR] Invalid volume level. Must be between 0 and 100.")
 
 
 # ========================
@@ -189,7 +322,7 @@ COMMANDS = {
     "play_track": play_track,
     "quit": quit_spotify,
     "player_state": get_player_state,
-    "track_info": get_current_track,
+    # "track_info": get_current_track,
     "track_name": get_track_name,
     "track_artist": get_track_artist,
     "track_album": get_track_album,
@@ -206,7 +339,7 @@ COMMANDS = {
     "album_artwork": get_album_artwork,
     "player_position": get_player_position,
     "set_player_position": set_player_position,
-    "volume": get_volume,
+    # "volume": get_volume,
     "set_volume": set_volume,
     "shuffling": is_shuffling,
     "set_shuffle": set_shuffle,
@@ -221,11 +354,14 @@ COMMANDS = {
 
 def handle_command(action, details=None):
     """Executes the given Spotify command dynamically."""
+    print("ACTION IN HANDLE COMMAND",action)
     if action in COMMANDS:
         if details:
             COMMANDS[action](details)  # Call with parameter if needed
         else:
-            return COMMANDS[action]()  # Call function without parameters
+            result = COMMANDS[action]()  # Call function without parameters
+            if result:
+                print(result) # Call function without parameters
     else:
         print(f"Unsupported action '{action}' for Spotify.")
 
