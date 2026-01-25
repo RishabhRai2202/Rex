@@ -200,8 +200,20 @@ def run_nvidia_llm(user_input, available_commands):
             frequency_penalty=0,
             presence_penalty=0
         )
-        raw_output = completion.choices[0].message.content.strip()
-        print("[DEBUG] Raw L LL Output:\n", raw_output)
+        message = completion.choices[0].message
+        content = message.content
+
+        # Some models (like Nemotron) return content in reasoning_content
+        if content is None:
+            reasoning = getattr(message, 'reasoning_content', None)
+            if reasoning:
+                print("[DEBUG] Using reasoning_content from response")
+                content = reasoning
+            else:
+                content = ""
+
+        raw_output = content.strip()
+        print("[DEBUG] Raw LLM Output:\n", raw_output)
         commands = [line.strip() for line in raw_output.split("\n") if line.strip()]
         return commands
     except Exception as e:
